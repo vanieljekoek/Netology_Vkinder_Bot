@@ -1,6 +1,7 @@
 import os
 import logging
 import vk_api
+import random
 from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.utils import get_random_id
 from backend import VkTools
@@ -50,7 +51,7 @@ class BotInterface:
         for event in longpoll.listen():
             if event.type == VkEventType.MESSAGE_NEW and event.to_me:
                 command = event.text.lower()
-                if command in ('привет', 'приветик', 'hello', 'шалом', 'салам'):
+                if command in ('привет', 'приветик', 'hello', 'шалом', 'салам', 'hi'):
                     self.params = self.api.get_profile_info(event.user_id)
                     self.message_send(event.user_id, f'''Приветствую тебя, {self.params["name"]}!\nЯ - бот знакомств в социальной сети ВК.
 Готов помочь тебе найти интересных людей и, возможно, новых друзей или даже вторую половинку.\n\nДавай начнем!
@@ -62,6 +63,7 @@ class BotInterface:
                     connection = DatabaseConnection.connect_to_database()
                     DatabaseConnection.create_table_found_users(connection)
                     users = self.api.search_users(self.params)
+                    random.choice(users)
                     num_user = 0
 
                     while users and num_user < 10:
@@ -84,24 +86,39 @@ class BotInterface:
                                         break
                                 self.message_send(event.user_id,
                                                   f'''Знакомься, это - {user["name"]} \n
-                                А вот ссылочка на страницу пользователя: https://vk.com/id{user["id"]}''',
+А вот ссылочка на страницу пользователя: https://vk.com/id{user["id"]}''',
                                                   attachment=attachment
                                                   )
                     DatabaseConnection.disconnect_from_database(connection)
-                elif command in ('следующие', 'next'):
-                    # Adding new users to the DB
-                    DatabaseConnection.insert_data_found_users(connection, vk_id, 1000)
-                    photos_user = self.api.get_photos(user['id'])
-                    attachment = ''
-                    for num, photo in enumerate(photos_user):
-                        attachment += f'photo{photo["owner_id"]}_{photo["id"]},'
-                        if num == 2:
-                            break
-                    self.message_send(event.user_id,
-                        f'''Знакомься, это - {user["name"]}
-А вот ссылочка на страницу пользователя: \U0001F449 https://vk.com/id{user["id"]}''',
-                        attachment=attachment
-                        )
+                elif command in ('Cледующие', 'move'):
+                    connection = DatabaseConnection.connect_to_database()
+                    DatabaseConnection.create_table_found_users(connection)
+                    users = self.api.search_users(self.params)
+                    num_user = 0
+
+                    while users and num_user < 10:
+                        user = users.pop()
+                        vk_id = str(user["id"])
+                        if vk_id not in shown_users:
+                            shown_users.add(vk_id)
+                            num_user += 1
+                            # Checking if a user exists in the DB
+                            if DatabaseConnection.check_found_users(connection, vk_id):
+                                self.message_send(event.user_id, f"{user['name']} уже есть в базе данных.")
+                            else:
+                                # Adding new users to the DB
+                                DatabaseConnection.insert_data_found_users(connection, vk_id, 1000)
+                                photos_user = self.api.get_photos(user['id'])
+                                attachment = ''
+                                for num, photo in enumerate(photos_user):
+                                    attachment += f'photo{photo["owner_id"]}_{photo["id"]},'
+                                    if num == 2:
+                                        break
+                                self.message_send(event.user_id,
+                                                  f'''Знакомься, это - {user["name"]} \n
+А вот ссылочка на страницу пользователя: https://vk.com/id{user["id"]}''',
+                                                  attachment=attachment
+                                                  )
                     DatabaseConnection.disconnect_from_database(connection)
                 
                 elif command in ('пока', 'buy'):
