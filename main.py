@@ -99,31 +99,27 @@ class BotInterface:
                     connection = DatabaseConnection.connect_to_database()
                     DatabaseConnection.create_table_found_users(connection)
                     users = random.sample(self.api.search_users(self.params), 10)
-                    num_user = 0
-
-                    while users and num_user < 10:
-                        user = users.pop()
-                        vk_id = str(user["id"])
-                        if vk_id not in shown_users:
-                            shown_users.add(vk_id)
-                            num_user += 1
-                            # Checking if a user exists in the DB
-                            if DatabaseConnection.check_found_users(connection, vk_id):
-                                self.message_send(event.user_id, f"{user['name']} уже есть в базе данных.")
-                            else:
-                                # Adding new users to the DB
-                                DatabaseConnection.insert_data_found_users(connection, vk_id, 0)
-                                photos_user = self.api.get_photos(user['id'])
-                                attachment = ''
-                                for num, photo in enumerate(photos_user):
-                                    attachment += f'photo{photo["owner_id"]}_{photo["id"]},'
-                                    if num == 2:
-                                        break
-                                self.message_send(event.user_id,
-                                                  f'''Знакомься, это - {user["name"]} \n
+                    user = users.pop()
+                    vk_id = str(user["id"])
+                    if vk_id not in shown_users:
+                        shown_users.add(vk_id)
+                        # Checking if a user exists in the DB
+                        if DatabaseConnection.check_found_users(connection, vk_id):
+                            self.message_send(event.user_id, f"{user['name']} уже есть в базе данных.")
+                        else:
+                            # Adding new users to the DB
+                            DatabaseConnection.insert_data_found_users(connection, vk_id, 0)
+                            photos_user = self.api.get_photos(user['id'])
+                            attachment = ''
+                            for num, photo in enumerate(photos_user):
+                                attachment += f'photo{photo["owner_id"]}_{photo["id"]},'
+                                if num == 2:
+                                    break
+                            self.message_send(event.user_id,
+                                              f'''Знакомься, это - {user["name"]} \n
 А вот ссылочка на страницу пользователя: https://vk.com/id{user["id"]}''',
-                                                  attachment=attachment
-                                                  )
+                                              attachment=attachment
+                                              )
                     DatabaseConnection.disconnect_from_database(connection)
                 
                 elif command in ('пока', 'bye'):
