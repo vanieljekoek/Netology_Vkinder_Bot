@@ -32,7 +32,7 @@ class VkTools:
 
     # User search by specified parameters
     def search_users(self, params):
-        sex = 2 if params['sex'] == 1 else 1
+        sex = 1 if params['sex'] == 2 else 2
         city = params['city']
         user_year = int(params['bdate'].split('.')[-1])
         age = datetime.now().year - user_year
