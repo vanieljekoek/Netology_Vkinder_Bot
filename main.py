@@ -62,8 +62,7 @@ class BotInterface:
                 elif command in ('поиск', 'search', 'следующие', 'next', 'go', 'давай', 'далее', 'поехали', 'ещё'):
                     connection = DatabaseConnection.connect_to_database()
                     DatabaseConnection.create_table_found_users(connection)
-                    users = self.api.search_users(self.params)
-                    random.choice(users)
+                    users = random.sample(self.api.search_users(self.params), 10)
                     num_user = 0
 
                     while users and num_user < 10:
