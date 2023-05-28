@@ -2,11 +2,11 @@ import os
 import logging
 import vk_api
 import random
+import json
 from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.utils import get_random_id
 from backend import VkTools
 from database import DatabaseConnection
-from reply_keyboard import keyboard
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,16 +30,51 @@ class BotInterface:
         self.interface = vk_api.VkApi(token=community_token)
         self.api = VkTools(access_token)
         self.params = None
-        self.keyboard = keyboard
+        self.keyboard = None
         print('VKinder Bot is Working')
 
+    # Keyboard Add
     def message_send(self, user_id, message, attachment=None, keyboard=None):
+        if keyboard is None:
+            keyboard = {
+                "one_time": False,
+                "buttons": [[
+                    {
+                        "action": {
+                            "type": "text",
+                            "payload": "{\"button\": \"search\"}",
+                            "label": "Поиск"
+                        },
+                        # White button
+                        "color": "primary"
+                    },
+                    {
+                        "action": {
+                            "type": "text",
+                            "payload": "{\"button\": \"next\"}",
+                            "label": "Следующие"
+                        },
+                        # Green button
+                        "color": "positive"
+                    },
+                    {
+                        "action": {
+                            "type": "text",
+                            "payload": "{\"button\": \"bye\"}",
+                            "label": "Пока"
+                        },
+                        # Red button
+                        "color": "negative"
+                    }
+                ]],
+            }
+
         self.interface.method('messages.send', {
             'user_id': user_id,
             'message': message,
             'attachment': attachment,
             'random_id': get_random_id(),
-            'keyboard': keyboard
+            'keyboard': json.dumps(keyboard)
         })
 
     # Event handler
@@ -59,6 +94,7 @@ class BotInterface:
 Если тебе понравится кто-то из них, я смогу предоставить тебе ссылку на страницу пользователя и даже некоторые фотографии.\n
 С уважением,
 Бот знакомств Vkinder \U0001F498''')
+
                 elif command in ('поиск', 'search', 'следующие', 'next', 'go', 'давай', 'далее', 'поехали', 'ещё'):
                     connection = DatabaseConnection.connect_to_database()
                     DatabaseConnection.create_table_found_users(connection)
@@ -90,7 +126,7 @@ class BotInterface:
                                                   )
                     DatabaseConnection.disconnect_from_database(connection)
                 
-                elif command in ('пока', 'buy'):
+                elif command in ('пока', 'bye'):
                     self.message_send(event.user_id, 'Мне очень жаль, но результаты поиска будут очищены\nДо новых встреч\U0001F44B')
                     connection = DatabaseConnection.connect_to_database()
                     DatabaseConnection.remove_table_found_users(connection)
