@@ -49,7 +49,7 @@ class VKinderBot:
                 # Обработчик любой другой команды кроме ...
                 if command not in ('привет', 'поиск', 'search', 'go', 'следующие', 'next', 'ещё'):
                     self.write_message(sender, 'Мне очень жаль, но результаты поиска будут очищены\nДо новых встреч\U0001F44B')
-                    self.del_table()
+                    self.database.delete_table()
                     os.system('python ' + os.path.realpath(__file__))
                     continue
                 # Обработка команды "Привет"
@@ -181,7 +181,7 @@ class VKinderBot:
             if datetime.datetime.now().month < bdate.month or (
                     datetime.datetime.now().month == bdate.month
                     and datetime.datetime.now().day < bdate.day):
-                age = min(max(how_old - 5, how_old - 5), how_old + 5)
+                age = min(max(how_old - 1, how_old - 1), how_old + 1)
             return age
     # Функция получения ТОП5 Фото
     def get_top_photos(self, user):
