@@ -170,23 +170,18 @@ class VKinderBot:
                 self.write_message(sender, '', self.keyboard, attachment=','.join(attachment))
                 self.database.save_vk_users(vk_id, vk_url)
                 break
-            else:
-                self.write_message(sender, f'{user_info[0]["first_name"]} {user_info[0]["last_name"]}\n'
-                                           f'Страница: {vk_url}\nПрофиль данного пользователя закрыт.\nДля доступа к странице, отправьте заявку на добавление в друзья \U0001F91D', self.keyboard)
-                break
-
-
+            else: continue
         self.search_offset += 30
         
     # Функция вычисления возраста пользователя
     def calculate_age(self, bdate):
         if bdate:
             bdate = datetime.datetime.strptime(bdate, '%d.%m.%Y')
-            age = datetime.datetime.now().year - bdate.year
+            how_old = datetime.datetime.now().year - bdate.year
             if datetime.datetime.now().month < bdate.month or (
                     datetime.datetime.now().month == bdate.month
                     and datetime.datetime.now().day < bdate.day):
-                age -= 1
+                age = min(max(how_old - 5, how_old - 5), how_old + 5)
             return age
     # Функция получения ТОП5 Фото
     def get_top_photos(self, user):
