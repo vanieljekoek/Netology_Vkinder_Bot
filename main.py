@@ -1,212 +1,213 @@
+# Импортируем необходимые библиотеки и модули
 import os
+import datetime
+import json
 import logging
 import vk_api
-import random
-import json
-from vk_api.longpoll import VkLongPoll, VkEventType
+from vk_api.longpoll import VkEventType, VkLongPoll
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from vk_api.utils import get_random_id
-from backend import VkTools
-from database import DatabaseConnection
 from dotenv import load_dotenv
+from database import DatabaseConnect
 
+#Загружаем переменные среды исполнения
 load_dotenv()
 
-# Import environment variables
-community_token = os.getenv('c_token')
-access_token = os.getenv('a_token')
-
-# Set the log level
-log_dir = os.path.join(os.path.dirname(__file__), 'vkinder_Log')
+# Задаём уровень логов
+log_dir = os.path.join(os.path.dirname(__file__), 'vkinder_Log')    # Указание названия папки с логами
 
 if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
+    os.makedirs(log_dir)    # Создание папки с логами рядом с основным исполняемым кодом
 
+# Задаём уровень логов (Уровень DEBUG - максимально подробный лог)
 logging.basicConfig(filename=os.path.join(log_dir, 'debug.log'), level=logging.DEBUG,
+                    # Формат - Время, Дата, событие, сообщение)
                     format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
-# Initializing the bot
-class BotInterface:
-    def __init__(self, community_token, access_token):
-        self.interface = vk_api.VkApi(token=community_token)
-        self.api = VkTools(access_token)
-        self.params = None
-        self.keyboard = None
-        print('VKinder Bot is Working')
+# Инициализация работы бота
+class VKinderBot:
+    def __init__(self):
+        self.group_auth = vk_api.VkApi(token=os.getenv('c_token'))
+        self.user_auth = vk_api.VkApi(token=os.getenv('a_token'))
+        self.longpoll = VkLongPoll(self.group_auth)
+        # Добавляем клавиатуру
+        self.keyboard = VkKeyboard(one_time=True)
+        self.keyboard.add_button('Поиск', color=VkKeyboardColor.POSITIVE)
+        self.keyboard.add_button('Следующие', color=VkKeyboardColor.SECONDARY)
+        self.keyboard.add_button('Пока', color=VkKeyboardColor.NEGATIVE)
+        self.database = DatabaseConnect(dbname=os.getenv('db_name'), user=os.getenv('user'), password=os.getenv('password'), host=os.getenv('host'), port=os.getenv('password'))
+        self.search_offset = -1
+    print('\U0001F916 "Vkinder" запущен!', 'Для прекращения работы бота нажмите CTRL + C', sep='\n')
 
-    # Keyboard Add
-    def message_send(self, user_id, message, attachment=None, keyboard=None):
-        if keyboard is None:
-            keyboard = {
-                "one_time": False,
-                "buttons": [[
-                    {
-                        "action": {
-                            "type": "text",
-                            "payload": "{\"button\": \"search\"}",
-                            "label": "Поиск"
-                        },
-                        # White button
-                        "color": "primary"
-                    },
-                    {
-                        "action": {
-                            "type": "text",
-                            "payload": "{\"button\": \"next\"}",
-                            "label": "Следующие"
-                        },
-                        # Green button
-                        "color": "positive"
-                    },
-                    {
-                        "action": {
-                            "type": "text",
-                            "payload": "{\"button\": \"bye\"}",
-                            "label": "Пока"
-                        },
-                        # Red button
-                        "color": "negative"
-                    }
-                ]],
-            }
-
-        self.interface.method('messages.send', {
-            'user_id': user_id,
-            'message': message,
-            'attachment': attachment,
-            'random_id': get_random_id(),
-            'keyboard': json.dumps(keyboard)
-        })
-
-    # Event handler
-    def event_handler(self):
-        longpoll = VkLongPoll(self.interface)
-        # Many featured users
-        shown_users = set()
-
-        for event in longpoll.listen():
-            if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+    # Функция запуска бота
+    def run(self):
+        self.database.create_table()
+        for event in self.longpoll.listen():
+            if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
                 command = event.text.lower()
-                if command in ('привет', 'приветик', 'hello', 'шалом', 'салам', 'hi'):
-                    self.params = self.api.get_profile_info(event.user_id)
-                    self.message_send(event.user_id, f'''Приветствую тебя, {self.params["name"]}!\nЯ - бот знакомств в социальной сети ВК.
+                sender = event.user_id
+                # Обработчик любой другой команды кроме ...
+                if command not in ('привет', 'поиск', 'search', 'go', 'следующие', 'next', 'ещё'):
+                    self.write_message(sender, 'Мне очень жаль, но результаты поиска будут очищены\nДо новых встреч\U0001F44B')
+                    self.del_table()
+                    os.system('python ' + os.path.realpath(__file__))
+                    continue
+                # Обработка команды "Привет"
+                elif command == 'привет':
+                    # Процесс получения данных со страницы пользователя
+                    info = self.user_auth.method('users.get', {'user_ids': sender, 'fields': 'first_name,last_name,sex,city,bdate'})
+                    user_info = {
+                        'id': info[0]['id'],
+                        'first_name': info[0]['first_name'],
+                        'last_name': info[0]['last_name'],
+                        'sex': info[0]['sex'],
+                        'city': info[0]['city'],
+                        'bdate': info[0]['bdate'],
+                    }
+                    # Отправка приветственного сообщения
+                    self.write_message(sender, f'''Приветствую тебя, {user_info["first_name"]} {user_info["last_name"]}!\nЯ - бот знакомств в социальной сети ВК.
 Готов помочь тебе найти интересных людей и, возможно, новых друзей или даже вторую половинку.\n\nДавай начнем!
 Просто напиши мне "Поиск", чтобы увидеть первых 10 пользователей, соответствующих твоим предпочтениям.
 Если тебе понравится кто-то из них, я смогу предоставить тебе ссылку на страницу пользователя и даже некоторые фотографии.\n
 С уважением,
-Бот знакомств Vkinder \U0001F498''')
+Бот знакомств Vkinder \U0001F498''', self.keyboard)
+                # Обработка команды "Поиск" и вариаций   
+                elif command in ('поиск', 'search', 'go'):
+                    self.search_offset = 0
+                    self.search_users(sender)
+                # Обработка команды "Следующее" и вариаций    
+                elif command in ('следующие', 'next', 'ещё'):
+                    if self.search_offset < 0:
+                        self.write_message(sender, 'Сперва воспользуйтесь поиском, нажав соответствующую кнопку или введя команду "Поиск"',
+                                           self.keyboard)
+                    else:
+                        self.search_users(sender)
 
-                elif command in ('поиск', 'search', 'следующие', 'next', 'go', 'давай', 'далее', 'поехали', 'ещё'):
-                    connection = DatabaseConnection.connect_to_database()
-                    DatabaseConnection.create_table_found_users(connection)
-                    users = random.sample(self.api.search_users(self.params), 10)
-                    user = users.pop()
-                    vk_id = str(user["id"])
-                    if vk_id not in shown_users:
-                        shown_users.add(vk_id)
-                        # Checking if a user exists in the DB
-                        if DatabaseConnection.check_found_users(connection, vk_id):
-                            self.message_send(event.user_id, f"{user['name']} уже есть в базе данных.")
+                # Алгоритм проверки пользователей по БД
+                elif hasattr(event, 'payload') and event.payload:
+                    payload = json.loads(event.payload)
+                    if 'vk_id' in payload:
+                        vk_id = payload['vk_id']
+                        vk_url = payload['vk_url']
+                        if not self.database.check_vk_users(vk_id):
+                            self.database.save_vk_users(vk_id, vk_url)
+                            self.write_message(event.user_id, f'Пользователь {vk_url} сохранен')
                         else:
-                            # Adding new users to the DB
-                            DatabaseConnection.insert_data_found_users(connection, vk_id, 0)
-                            photos_user = self.api.get_photos(user['id'])
-                            attachment = ''
-                            for num, photo in enumerate(photos_user):
-                                attachment += f'photo{photo["owner_id"]}_{photo["id"]},'
-                                if num == 2:
-                                    break
-                            self.message_send(event.user_id,
-                                              f'''Знакомься, это - {user["name"]} \n
-А вот ссылочка на страницу пользователя: https://vk.com/id{user["id"]}''',
-                                              attachment=attachment
-                                              )
-                    DatabaseConnection.disconnect_from_database(connection)
-                
-                elif command in ('пока', 'bye'):
-                    self.message_send(event.user_id, 'Мне очень жаль, но результаты поиска будут очищены\nДо новых встреч\U0001F44B')
-                    connection = DatabaseConnection.connect_to_database()
-                    DatabaseConnection.remove_table_found_users(connection)
-                    DatabaseConnection.disconnect_from_database(connection)
-                else:
-                    self.message_send(event.user_id, 'Неверная команда')
-                    
-#     # Тестовый код, в случае если у пользователя не заполнены данные: пол или город или возраст
-#     def handle_missing_info(self, user_id):
-#         if self.params['sex'] is None:
-#             self.message_send(user_id, 'Укажите ваш пол ("Муж" или "Жен")')
-#         elif self.params['city'] is None:
-#             self.message_send(user_id, 'Укажите город, в котором вы проживаете')
-#         elif self.params['bdate'] is None:
-#             self.message_send(user_id, 'Укажите год вашего рождения')
+                            self.write_message(event.user_id, f'Пользователь {vk_url} был показан Вам ранее')
 
-#     def handle_user_input(self, user_id, command):
-#         command = command.lower()
-#         if self.params['sex'] is None:
-#             if command == 'муж':
-#                 self.params['sex'] = 2
-#                 self.handle_missing_info(user_id)
-#             elif command == 'жен':
-#                 self.params['sex'] = 1
-#                 self.handle_missing_info(user_id)
-#             else:
-#                 self.message_send(user_id, 'Некорректный ввод. Укажите ваш пол ("Муж" или "Жен")')
-#         elif self.params['city'] is None:
-#             self.params['city'] = command
-#             self.handle_missing_info(user_id)
-#         elif self.params['bdate'] is None:
-#             try:
-#                 birth_year = int(command)
-#                 self.params['bdate'] = f"01.01.{birth_year}"
-#                 self.handle_missing_info(user_id)
-#             except ValueError:
-#                 self.message_send(user_id, 'Некорректный ввод. Укажите год вашего рождения (число)')
-#         else:
-#             self.message_send(user_id, 'Неверная команда')
-
-#     def handle_command(self, user_id, command):
-#         if command in ('привет', 'приветик', 'hello', 'шалом', 'салам', 'hi'):
-#             self.params = self.api.get_profile_info(user_id)
-#             self.handle_missing_info(user_id)
-#         elif command in ('поиск', 'search', 'следующие', 'next', 'go', 'ещё', 'поехали','давай','го', 'fire'):
-#             if self.params is None:
-#                 self.message_send(user_id, 'Прежде чем начать поиск, укажите необходимую информацию:')
-#                 self.handle_missing_info(user_id)
-#             else:
-#                 connection = DatabaseConnection.connect_to_database()
-#                 DatabaseConnection.create_table_found_users(connection)
-#                 users = self.api.search_users(self.params)
-#                 user = users.pop()
-#                 vk_id = str(user["id"])
-#                 if vk_id not in shown_users:
-#                     shown_users.add(vk_id)
-#                     num_user += 1
-#                     # Checking if a user exists in the DB
-#                     if DatabaseConnection.check_found_users(connection, vk_id):
-#                         self.message_send(user_id, f"{user['name']} уже есть в базе данных.")
-#                     else:
-#                         # Adding new users to the DB
-#                         DatabaseConnection.insert_data_found_users(connection, vk_id, 0)
-#                         photos_user = self.api.get_photos(user['id'])
-#                         attachment = ''
-#                         for num, photo in enumerate(photos_user):
-#                             attachment += f'photo{photo["owner_id"]}_{photo["id"]},'
-#                             if num == 2:
-#                                 break
-#                         self.message_send(user_id,
-#                                           f'''Знакомься, это - {user["name"]} \n
-# А вот ссылочка на страницу пользователя: https://vk.com/id{user["id"]}''',
-#                                           attachment=attachment
-#                                           )
-#             DatabaseConnection.disconnect_from_database(connection)
+    # Функция отправки Кандидатов пользователю
+    def write_message(self, sender, message, keyboard=None, attachment=None):
+        try:
+            keyboard_data = keyboard.get_keyboard()
+        except AttributeError:
+            keyboard_data = None
+        self.group_auth.method('messages.send',
+                               {'user_id': sender, 'message': message, 'random_id': get_random_id(),
+                                'keyboard': keyboard_data, 'attachment': attachment})
         
-#         elif command in ('пока', 'bye'):
-#             self.message_send(user_id, 'Мне очень жаль, но результаты поиска будут очищены\nДо новых встреч\U0001F44B')
-#             connection = DatabaseConnection.connect_to_database()
-#             DatabaseConnection.remove_table_found_users(connection)
-#             DatabaseConnection.disconnect_from_database(connection)
-#         else:
-#             self.handle_user_input(user_id, command)
+    # Функция поиска пользователей
+    def search_users(self, sender):
+        try:
+            search_params = {'user_ids': sender, 'fields': 'bdate, sex, city'}
+            user_info = self.user_auth.method('users.get', search_params)
+            user_info = user_info[0]
 
-if __name__ == '__main__':
-    bot = BotInterface(community_token, access_token)
-    bot.event_handler()
+        # Отправка сообщения пользователю, в случае неполной информации в профиле
+        except vk_api.exceptions.ApiError as e:
+            self.write_message(sender, f'Произошла ошибка при получении информации о пользователе: {e}', self.keyboard)
+            return
+        # сообщение с просьбой указать дату рождения
+        if 'bdate' not in user_info:
+            self.write_message(sender, 'Не удалось получить дату рождения пользователя. Укажите дату рождения в настройках вашего профиля.')
+            return
+        # Сообщение с просьбой выбрать пол пользователя
+        if 'sex' not in user_info:
+            self.write_message(sender, 'Не удалось получить пол пользователя. Укажите пол в настройках вашего профиля.')
+            return
+        # Сообщение с просьбой указать город проживания пользователя
+        if 'city' == "" in user_info:
+            self.write_message(sender, 'Не удалось получить информацию о городе. Укажите ваш город в настройках профиля.')
+            return
+
+        user_age = self.calculate_age(user_info['bdate'])
+        user_sex = user_info['sex']
+        user_city = user_info['city']['id']
+
+        try:
+            search_response = self.user_auth.method('users.search',
+                                                    {'count': 30,
+                                                     'city': user_city,
+                                                     'sex': 1 if user_sex == 2 else 2,
+                                                     'status': 0,
+                                                     'status_list': [1, 6],
+                                                     'age_from': user_age,
+                                                     'age_to': user_age,
+                                                     'has_photo': 1,
+                                                     'fields': 'photo_max_orig, screen_name',
+                                                     'offset': self.search_offset})
+
+        except vk_api.exceptions.ApiError as e:
+            self.write_message(sender, f'Произошла ошибка при поиске пользователей: {e}', self.keyboard)
+            return
+
+        for user in search_response['items']:
+            vk_id = user['id']
+            vk_url = f'https://vk.com/{user["screen_name"]}'
+            user_info = self.user_auth.method('users.get', {'user_ids': vk_id, 'fields': 'is_closed, first_name, last_name, online, last_seen'})
+            if not user_info: continue
+            if not user_info[0]['is_closed']:
+                if self.database.check_vk_users(vk_id): continue
+                photos = self.get_top_photos(user)
+                message = f'''Знакомься, это - {user_info[0]["first_name"]} {user_info[0]["last_name"]}
+Ссылочка на страницу пользователя: {vk_url}\n
+В последний раз пользователь был онлайн:    {datetime.datetime.fromtimestamp(user_info[0]["last_seen"]["time"]).strftime("%d-%m-%Y %H:%M")}\n\n
+А вот лучшие фото со страницы \U0001f929'''
+                self.write_message(sender, message, self.keyboard)
+                
+                attachment = []
+                for photo in photos:
+                    attachment.append('photo{}_{}'.format(photo['owner_id'], photo['id']))
+                self.write_message(sender, '', self.keyboard, attachment=','.join(attachment))
+                self.database.save_vk_users(vk_id, vk_url)
+                break
+            else:
+                self.write_message(sender, f'{user_info[0]["first_name"]} {user_info[0]["last_name"]}\n'
+                                           f'Страница: {vk_url}\nПрофиль данного пользователя закрыт.\nДля доступа к странице, отправьте заявку на добавление в друзья \U0001F91D', self.keyboard)
+                break
+
+
+        self.search_offset += 30
+        
+    # Функция вычисления возраста пользователя
+    def calculate_age(self, bdate):
+        if bdate:
+            bdate = datetime.datetime.strptime(bdate, '%d.%m.%Y')
+            age = datetime.datetime.now().year - bdate.year
+            if datetime.datetime.now().month < bdate.month or (
+                    datetime.datetime.now().month == bdate.month
+                    and datetime.datetime.now().day < bdate.day):
+                age -= 1
+            return age
+    # Функция получения ТОП5 Фото
+    def get_top_photos(self, user):
+        photos_response = self.user_auth.method('photos.get', {'owner_id': user['id'], 'album_id': 'profile', 'rev': 1,
+                                                               'count': 5, 'extended': 1, 'photo_sizes': 1})
+        photos_data = []
+        for photo in photos_response['items']:
+            sizes = photo['sizes']
+            likes = photo['likes']['count']
+            comments = photo['comments']['count']
+            photo_data = {'sizes': sizes, 'likes': likes, 'comments': comments, 'owner_id': photo['owner_id'],
+                          'id': photo['id']}
+            photos_data.append(photo_data)
+        photos_data = sorted(photos_data, key=lambda x: (x['likes'], x['comments']), reverse=True)[:5]
+        return photos_data
+    
+    # Функция удаления таблицы с пользователями
+    def del_table(self):
+        self.database.delete_table()
+        self.database.disconnect()
+
+bot = VKinderBot()
+bot.__init__()
+bot.run()

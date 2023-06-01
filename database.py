@@ -1,71 +1,65 @@
-# Import required libraries
 import os
 import psycopg2
 from dotenv import load_dotenv
 
-# Initialize environment variables
 load_dotenv()
 
-class DatabaseConnection:
-    # Connect to DB
-    def connect_to_database():
-        return psycopg2.connect(
-            # Import environment variables
-            host=os.getenv('host'),
-            user=os.getenv('user'),
-            password=os.getenv('password'),
-            dbname=os.getenv('db_name'),
-            port=os.getenv('port')
+class DatabaseConnect:
+    def __init__(self, dbname, user, password, host, port):
+        self.dbname = os.getenv('db_name')
+        self.user = os.getenv('user')
+        self.password = os.getenv('password')
+        self.host = os.getenv(host)
+        self.port = os.getenv(port)
+        self.conn = None
+        print("/PostgreSQL/ Успешное подключение к Базе Данных")
+
+    def connect(self):
+        self.conn = psycopg2.connect(
+            dbname=self.dbname,
+            user=self.user,
+            password=self.password,
+            host=self.host,
+            port=self.port
         )
 
-    # Creating table found_users
-    def create_table_found_users(connection):
-        cursor = connection.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS found_users
-                        (
-                        id serial PRIMARY KEY,
-                        vk_id varchar(20) UNIQUE
-                        );'''
-                       )
-        connection.commit()
-        cursor.close()
-        print("(SQL) Таблица found_users = ok")
+    def create_table(self):
+        self.connect()
+        cur = self.conn.cursor()
+        cur.execute('CREATE TABLE IF NOT EXISTS vk_users (id serial PRIMARY KEY, vk_id integer UNIQUE, '
+                    'vk_url varchar);')
+        self.conn.commit()
+        cur.close()
+        print("/PostgreSQL/ Таблица 'vk_users' создана")
 
-    # Checking if a user exists in the found_users table
-    def check_found_users(connection, vk_id):
-        cursor = connection.cursor()
-        cursor.execute('SELECT vk_id FROM found_users WHERE vk_id=%s;', (vk_id,))
-        result = cursor.fetchone()
-        cursor.close()
-        return result
+    def save_vk_users(self, vk_id, vk_url):
+        self.connect()
+        cur = self.conn.cursor()
+        cur.execute('INSERT INTO vk_users (vk_id, vk_url) VALUES (%s, %s);', (vk_id, vk_url))
+        self.conn.commit()
+        cur.close()
+        print("/PostgreSQL/ В таблицу добавленны новые пользователи")
 
-    # Adding data to the found_users table
-    def insert_data_found_users(connection, vk_id, offset):
-        cursor = connection.cursor()
-        cursor.execute('INSERT INTO found_users (vk_id) VALUES (%s);', (vk_id,))
-        connection.commit()
-        cursor.close()
-        print(f"(SQL) Запись seen user: {vk_id}")
+    def check_vk_users(self, vk_id):
+        self.connect()
+        cur = self.conn.cursor()
+        cur.execute('SELECT vk_id FROM vk_users WHERE vk_id = %s', (vk_id,))
+        result = cur.fetchone()
+        cur.close()
+        if result:
+            return True
+        else:
+            return False
+        print("/PostgreSQL/ Проверка пользователей по таблице выполнена успешно")
 
-    # Drop table found_users
-    def remove_table_found_users(connection):
-        cursor = connection.cursor()
-        cursor.execute('DROP TABLE IF EXISTS found_users;')
-        connection.commit()
-        cursor.close()
-        print("(SQL) Таблица found_users удалена")
+    def delete_table(self):
+        self.connect()
+        cur = self.conn.cursor()
+        cur.execute('DROP TABLE IF EXISTS vk_users;')
+        self.conn.commit()
+        cur.close()
+        print("/PostgreSQL/ Таблица 'vk_users' удалена")
 
-    # Disconnecting from the DB
-    def disconnect_from_database(connection):
-        connection.close()
-
-
-    if __name__ == "__main__":
-        connection = connect_to_database()
-        create_table_found_users(connection)
-
-        vk_id = "test"
-        offset = 0
-        insert_data_found_users(connection, vk_id, offset)
-        print(check_found_users(connection, vk_id))
-        disconnect_from_database(connection)
+    def disconnect(self):
+        self.conn.close()
+        print("/PostgreSQL/ Успешное отключение от базы данных")
