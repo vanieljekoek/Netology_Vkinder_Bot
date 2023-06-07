@@ -77,9 +77,11 @@ class VKinderBot:
                     self.search_users(sender)
                 # Обработка команды "Следующее" и вариаций    
                 elif command in ('следующие', 'next', 'ещё'):
-                    if self.search_offset > 0: self.search_users(sender)
-                    self.write_message(sender, 'Сперва воспользуйтесь поиском, нажав соответствующую кнопку или введя команду "Поиск"',
+                    if self.search_offset < 0:
+                        self.write_message(sender, 'Сперва воспользуйтесь поиском, нажав соответствующую кнопку или введя команду "Поиск"',
                                            self.keyboard)
+                    else:
+                        self.search_users(sender)
 
                 # Алгоритм проверки пользователей по БД
                 elif hasattr(event, 'payload') and event.payload:
@@ -166,9 +168,8 @@ class VKinderBot:
             self.write_message(sender, '', self.keyboard, attachment=','.join(attachment))
             self.database.save_vk_users(vk_id, vk_url)
             break
-        self.search_offset +=10
-        print (self.search_offset)
-
+        self.search_offset+=10
+        
     # Функция вычисления возраста пользователя
     def calculate_age(self, bdate):
         if bdate:
