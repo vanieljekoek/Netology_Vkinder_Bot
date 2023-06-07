@@ -67,7 +67,7 @@ class VKinderBot:
                     # Отправка приветственного сообщения
                     self.write_message(sender, f'''Приветствую тебя, {user_info["first_name"]} {user_info["last_name"]}!\nЯ - бот знакомств в социальной сети ВК.
 Готов помочь тебе найти интересных людей и, возможно, новых друзей или даже вторую половинку.\n\nДавай начнем!
-Просто напиши мне "Поиск", чтобы увидеть первых 10 пользователей, соответствующих твоим предпочтениям.
+Просто напиши мне "Поиск", чтобы увидеть первый результат, соответствующий твоим предпочтениям.
 Если тебе понравится кто-то из них, я смогу предоставить тебе ссылку на страницу пользователя и даже некоторые фотографии.\n
 С уважением,
 Бот знакомств Vkinder \U0001F498''', self.keyboard)
@@ -77,24 +77,20 @@ class VKinderBot:
                     self.search_users(sender)
                 # Обработка команды "Следующее" и вариаций    
                 elif command in ('следующие', 'next', 'ещё'):
-                    if self.search_offset < 0:
-                        self.write_message(sender, 'Сперва воспользуйтесь поиском, нажав соответствующую кнопку или введя команду "Поиск"',
+                    if self.search_offset > 0: self.search_users(sender)
+                    self.write_message(sender, 'Сперва воспользуйтесь поиском, нажав соответствующую кнопку или введя команду "Поиск"',
                                            self.keyboard)
-                    else:
-                        self.search_users(sender)
 
                 # Алгоритм проверки пользователей по БД
                 elif hasattr(event, 'payload') and event.payload:
                     payload = json.loads(event.payload)
-                    if 'vk_id' in payload:
-                        vk_id = payload['vk_id']
-                        vk_url = payload['vk_url']
-                        if not self.database.check_vk_users(vk_id):
-                            self.database.save_vk_users(vk_id, vk_url)
-                            self.write_message(event.user_id, f'Пользователь {vk_url} сохранен')
-                        else:
-                            self.write_message(event.user_id, f'Пользователь {vk_url} был показан Вам ранее')
-
+                    if 'vk_id' not in payload: self.write_message(event.user_id, f'Пользователь {vk_url} был показан Вам ранее')
+                    vk_id = payload['vk_id']
+                    vk_url = payload['vk_url']
+                    if not self.database.check_vk_users(vk_id):
+                        self.database.save_vk_users(vk_id, vk_url)
+                        self.write_message(event.user_id, f'Пользователь {vk_url} сохранен')
+                            
     # Функция отправки Кандидатов пользователю
     def write_message(self, sender, message, keyboard=None, attachment=None):
         try:
@@ -135,7 +131,7 @@ class VKinderBot:
 
         try:
             search_response = self.user_auth.method('users.search',
-                                                    {'count': 30,
+                                                    {'count': 1000,
                                                      'city': user_city,
                                                      'sex': 1 if user_sex == 2 else 2,
                                                      'status': 0,
@@ -155,24 +151,22 @@ class VKinderBot:
             vk_url = f'https://vk.com/{user["screen_name"]}'
             user_info = self.user_auth.method('users.get', {'user_ids': vk_id, 'fields': 'is_closed, first_name, last_name, online, last_seen'})
             if not user_info: continue
-            if not user_info[0]['is_closed']:
-                if self.database.check_vk_users(vk_id): continue
-                photos = self.get_top_photos(user)
-                message = f'''Знакомься, это - {user_info[0]["first_name"]} {user_info[0]["last_name"]}
+            if user_info[0]['is_closed']: continue
+            if self.database.check_vk_users(vk_id):continue
+            photos = self.get_top_photos(user)
+            message = f'''Знакомься, это - {user_info[0]["first_name"]} {user_info[0]["last_name"]}
 Ссылочка на страницу пользователя: {vk_url}\n
-В последний раз пользователь был онлайн:    {datetime.datetime.fromtimestamp(user_info[0]["last_seen"]["time"]).strftime("%d-%m-%Y %H:%M")}\n\n
+В последний раз пользователь был онлайн:    {datetime.datetime.fromtimestamp(user_info[0]["last_seen"]["time"]).strftime("%d-%m-%Yг. в %H:%M")}\n\n
 А вот лучшие фото со страницы \U0001f929'''
-                self.write_message(sender, message, self.keyboard)
+            self.write_message(sender, message, self.keyboard)
                 
-                attachment = []
-                for photo in photos:
-                    attachment.append('photo{}_{}'.format(photo['owner_id'], photo['id']))
-                self.write_message(sender, '', self.keyboard, attachment=','.join(attachment))
-                self.database.save_vk_users(vk_id, vk_url)
-                break
-            else: continue
-        self.search_offset += 30
-        
+            attachment = []
+            for photo in photos:
+                attachment.append('photo{}_{}'.format(photo['owner_id'], photo['id']))
+            self.write_message(sender, '', self.keyboard, attachment=','.join(attachment))
+            self.database.save_vk_users(vk_id, vk_url)
+            break
+
     # Функция вычисления возраста пользователя
     def calculate_age(self, bdate):
         if bdate:
