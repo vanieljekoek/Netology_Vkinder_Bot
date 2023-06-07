@@ -166,6 +166,8 @@ class VKinderBot:
             self.write_message(sender, '', self.keyboard, attachment=','.join(attachment))
             self.database.save_vk_users(vk_id, vk_url)
             break
+        self.search_offset +=10
+        print (self.search_offset)
 
     # Функция вычисления возраста пользователя
     def calculate_age(self, bdate):
