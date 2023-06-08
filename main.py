@@ -5,10 +5,10 @@ import json
 import logging
 import vk_api
 from vk_api.longpoll import VkEventType, VkLongPoll
-from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from vk_api.utils import get_random_id
 from dotenv import load_dotenv
-from database import DatabaseConnect
+from utils.database import DatabaseConnect
+from utils.buttons import create_keyboard
 
 #Загружаем переменные среды исполнения
 load_dotenv()
@@ -31,10 +31,7 @@ class VKinderBot:
         self.user_auth = vk_api.VkApi(token=os.getenv('a_token'))
         self.longpoll = VkLongPoll(self.group_auth)
         # Добавляем клавиатуру
-        self.keyboard = VkKeyboard(one_time=True)
-        self.keyboard.add_button('Поиск', color=VkKeyboardColor.POSITIVE)
-        self.keyboard.add_button('Следующие', color=VkKeyboardColor.SECONDARY)
-        self.keyboard.add_button('Пока', color=VkKeyboardColor.NEGATIVE)
+        self.keyboard = create_keyboard()
         self.database = DatabaseConnect(dbname=os.getenv('db_name'), user=os.getenv('user'), password=os.getenv('password'), host=os.getenv('host'), port=os.getenv('password'))
         self.search_offset = -1
     print('\U0001F916 "Vkinder" запущен!', 'Для прекращения работы бота нажмите CTRL + C', sep='\n')
