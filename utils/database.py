@@ -48,9 +48,6 @@ class DatabaseConnect:
         cur.close()
         if result:
             return True
-        else:
-            return False
-        print("/PostgreSQL/ Проверка пользователей по таблице выполнена успешно")
 
     def delete_table(self):
         self.connect()
